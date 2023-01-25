@@ -1,3 +1,4 @@
+import copy
 import torch
 import torch.nn as nn
 
@@ -9,7 +10,7 @@ class MultiHeadAttention(nn.Module):
         self.dim_V = dim_V
         self.qQ = nn.Linear(dim_q, head_num * dim_QK, bias=False)
         self.kK = nn.Linear(dim_k, head_num * dim_QK, bias=False)
-        self.vV = nn.Linear(dim_v, dim_V, bias=False)
+        self.vV = nn.Linear(dim_v, head_num * dim_V, bias=False)
         self.linear_out = nn.Linear(head_num * dim_V, dim_out)
         self.softmax = nn.Softmax(dim=3)
 
@@ -20,21 +21,22 @@ class MultiHeadAttention(nn.Module):
     def forward(self, q, k, v, mask=None):
         batch = q.shape[0]
         length_q = q.shape[1]
+        length_kv = k.shape[1]
         Q = self.qQ(q) # (batch, length_q, head_num * dim_QK)
         K = self.kK(k) # (batch, length_kv, head_num * dim_QK)
-        V = self.vv(v) # (batch, length_kv, head_num * dim_V)
+        V = self.vV(v) # (batch, length_kv, head_num * dim_V)
         
-        Q = torch.stack(Q.tensor_split(self.head_num, dim=2), dim=1) # (batch, head_num, length_q, dim_QK)
-        K = torch.stack(K.tensor_split(self.head_num, dim=2), dim=1) # (batch, head_num, length_kv, dim_QK)
-        V = torch.stack(V.tensor_split(self.head_num, dim=2), dim=1) # (batch, head_num, length_kv, dim_V)
+        Q = Q.view(batch, length_q, self.head_num, self.dim_QK).permute(0,2,1,3) # (batch, head_num, length_q, dim_QK)
+        K = K.view(batch, length_kv, self.head_num, self.dim_QK).permute(0,2,1,3) # (batch, head_num, length_kv, dim_QK)
+        V = V.view(batch, length_kv, self.head_num, self.dim_V).permute(0,2,1,3) # (batch, head_num, length_kv, dim_V)
 
         QK = torch.matmul(Q, K.transpose(3, 2)) / (self.dim_QK ** 0.5) # (batch, head_num, length_q, length_kv)
         if mask is not None:
             QK = QK + mask
 
-        softmax_QK = self.softmax(QK)
+        softmax_QK = self.softmax(QK).nan_to_num(0)
         QKV = torch.matmul(softmax_QK, V) # (batch, head_num, length_q, dim_V)
-        QKV = QKV.permute(0,2,1,3).reshape(batch, length_q, self.head_num * dim_V)
+        QKV = QKV.permute(0,2,1,3).reshape(batch, length_q, self.head_num * self.dim_V)
         out = self.linear_out(QKV)
         return out
 
