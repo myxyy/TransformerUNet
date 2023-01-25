@@ -10,9 +10,7 @@ class TextDataset(Dataset):
         self.text = open(path, 'r', encoding='utf-8').read().encode(encoding='utf-8')
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        data = self.text[index * self.size:(index+1) * self.size]
-        next = self.text[index * self.size + 1:(index+1) * self.size + 1]
-        return data, next
+        return self.text[index:self.size]
 
     def __len__(self) -> int:
-        return (len(self.text) - 1) // self.size
+        return len(self.text) - self.size + 1
