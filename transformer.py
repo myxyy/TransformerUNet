@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, dim_q, dim_k, dim_v, dim_QK, dim_V, head_num, dim_out)
+    def __init__(self, dim_q, dim_k, dim_v, dim_QK, dim_V, head_num, dim_out):
         super().__init__()
         self.head_num = head_num
         self.dim_QK = dim_QK
