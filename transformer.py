@@ -44,8 +44,8 @@ class DecoderBlock(nn.Module):
     def __init__(self, dim_q, dim_kv, head_num):
         super().__init__()
         self.layer_norm = nn.LayerNorm(dim_q)
-        self.mmha_self = MultiHeadAttention(dim_q, dim_q, dim_q, dim_q, dim_q, head_num, dim_q)
-        self.mmha_cross = MultiHeadAttention(dim_q, dim_kv, dim_kv, dim_q, dim_q, head_num, dim_q)
+        self.mmha_self = MultiHeadAttention(dim_q, dim_q, dim_q, dim_q//head_num, dim_q//head_num, head_num, dim_q)
+        self.mmha_cross = MultiHeadAttention(dim_q, dim_kv, dim_kv, dim_q//head_num, dim_q//head_num, head_num, dim_q)
         self.mlp1 = nn.Linear(dim_q, dim_q)
         self.act = nn.GELU()
         self.mlp2 = nn.Linear(dim_q, dim_q)
