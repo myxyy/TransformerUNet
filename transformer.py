@@ -56,12 +56,15 @@ class DecoderBlock(nn.Module):
 
     # key_value is assumed to be layer-normalized
     def forward(self, query, key_value, mask_self, mask_cross):
-        query = self.layer_norm(query)
-        x = self.mmha_self(query, query, query, mask_self)
-        query = x + query
+
         query = self.layer_norm(query)
         x = self.mmha_cross(query, key_value, key_value, mask_cross)
         query = x + query
+
+        query = self.layer_norm(query)
+        x = self.mmha_self(query, query, query, mask_self)
+        query = x + query
+
         query = self.layer_norm(query)
         x = self.mlp1(query)
         x = self.act(x)

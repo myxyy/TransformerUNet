@@ -49,10 +49,10 @@ class TransformerUNetGPT(pl.LightningModule):
 
 if __name__ == '__main__':
     transforms = transforms.Compose([])
-    length_log_2 = 10
+    length_log_2 = 11
     dataset = TextDataset('natsume.txt', 2**length_log_2, transforms)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=16, shuffle=True, num_workers=2, pin_memory=True, drop_last=True)
-    model = TransformerUNetGPT(length_log_2=length_log_2)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=32, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
+    model = TransformerUNetGPT(length_log_2=length_log_2, depth_unet=10, depth_transformer=1)
     trainer = pl.Trainer(devices=1, accelerator='gpu', max_epochs=500)
     trainer.fit(model, dataloader)
 
