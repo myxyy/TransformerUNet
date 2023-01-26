@@ -11,10 +11,12 @@ class TextDataset(Dataset):
         self.transforms = transforms
         self.text = numpy.array([i for i in open(path, 'r', encoding='utf-8').read().encode(encoding='utf-8')])
 
-    def __getitem__(self, index: int) -> torch.Tensor:
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
         data = self.text[index:index+self.size]
         data = self.transforms(data)
-        return data
+        data_next = self.text[index+1:index+1+self.size]
+        data_next = self.transforms(data_next)
+        return data, data_next
 
     def __len__(self) -> int:
-        return len(self.text) - self.size + 1
+        return len(self.text) - self.size

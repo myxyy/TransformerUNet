@@ -22,6 +22,7 @@ class MultiHeadAttention(nn.Module):
         batch = q.shape[0]
         length_q = q.shape[1]
         length_kv = k.shape[1]
+
         Q = self.qQ(q) # (batch, length_q, head_num * dim_QK)
         K = self.kK(k) # (batch, length_kv, head_num * dim_QK)
         V = self.vV(v) # (batch, length_kv, head_num * dim_V)
@@ -30,9 +31,12 @@ class MultiHeadAttention(nn.Module):
         K = K.view(batch, length_kv, self.head_num, self.dim_QK).permute(0,2,1,3) # (batch, head_num, length_kv, dim_QK)
         V = V.view(batch, length_kv, self.head_num, self.dim_V).permute(0,2,1,3) # (batch, head_num, length_kv, dim_V)
 
+        # print(f"Q.shape:{Q.shape}")
+        # print(f"K.shape:{K.shape}")
+        # print(f"V.shape:{V.shape}")
         QK = torch.matmul(Q, K.transpose(3, 2)) / (self.dim_QK ** 0.5) # (batch, head_num, length_q, length_kv)
         if mask is not None:
-            QK = QK + mask
+            QK = mask(QK)
 
         softmax_QK = self.softmax(QK).nan_to_num(0)
         QKV = torch.matmul(softmax_QK, V) # (batch, head_num, length_q, dim_V)

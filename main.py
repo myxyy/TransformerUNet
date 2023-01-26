@@ -11,9 +11,9 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 class TransformerUNetGPT(pl.LightningModule):
     logger: TensorBoardLogger
-    def __init__(self, length_log_2=12, depth_unet=4, depth_transformer=1, head_num=8):
+    def __init__(self, length_log_2, depth_unet=3, depth_transformer=1, dim_scale=1, head_num=8):
         super().__init__()
-        self.transformer_u_net = TransformerUNetSequence(length_log_2, depth_unet, depth_transformer, 256, head_num)
+        self.transformer_u_net = TransformerUNetSequence(length_log_2, depth_unet, depth_transformer, 256, dim_scale, head_num)
         self.sigmoid = nn.Sigmoid()
         self.criterion = nn.CrossEntropyLoss()
         self.apply(self._init_weights)
@@ -32,9 +32,11 @@ class TransformerUNetGPT(pl.LightningModule):
             nn.init.constant_(m.weight, 1.0)
 
     def training_step(self, batch, batch_idx):
-        x = nn.functional.one_hot(batch, 256)
-        x_hat = self.transformer_u_net(x)
-        loss = self.criterion(x_hat, x)
+        data, next = batch
+        x = nn.functional.one_hot(data, 256).float()
+        x_next = nn.functional.one_hot(next, 256).float()
+        x_hat = self.sigmoid(self.transformer_u_net(x))
+        loss = self.criterion(x_hat, x_next)
         self.train_loss_epoch.update(loss)
         return loss
 
@@ -47,9 +49,10 @@ class TransformerUNetGPT(pl.LightningModule):
 
 if __name__ == '__main__':
     transforms = transforms.Compose([])
-    dataset = TextDataset('natsume.txt', 2**12, transforms)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=128, shuffle=True, num_workers=2, pin_memory=True, drop_last=True)
-    model = TransformerUNetGPT()
+    length_log_2 = 10
+    dataset = TextDataset('natsume.txt', 2**length_log_2, transforms)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=16, shuffle=True, num_workers=2, pin_memory=True, drop_last=True)
+    model = TransformerUNetGPT(length_log_2=length_log_2)
     trainer = pl.Trainer(devices=1, accelerator='gpu', max_epochs=500)
     trainer.fit(model, dataloader)
 
