@@ -14,8 +14,6 @@ class TransformerUNetGPT(pl.LightningModule):
     def __init__(self, length_log_2, depth_unet=3, depth_transformer=1, dim_scale=1, head_num=8):
         super().__init__()
         self.transformer_u_net = TransformerUNetSequence(length_log_2, depth_unet, depth_transformer, 256, dim_scale, head_num)
-        self.sigmoid = nn.Sigmoid()
-        self.criterion = nn.CrossEntropyLoss()
         self.apply(self._init_weights)
         self.train_loss_epoch = MeanMetric()
         self.validate_loss_epoch = MeanMetric()
@@ -35,13 +33,14 @@ class TransformerUNetGPT(pl.LightningModule):
         data, next = batch
         x = nn.functional.one_hot(data, 256).float()
         x_next = nn.functional.one_hot(next, 256).float()
-        x_hat = self.sigmoid(self.transformer_u_net(x))
-        loss = self.criterion(x_hat, x_next)
+        x_hat = self.transformer_u_net(x)
+        loss = nn.CrossEntropyLoss()(x_hat, x_next)
         self.train_loss_epoch.update(loss)
         return loss
 
     def training_epoch_end(self, outputs):
         self.train_loss_epoch.reset()
+        torch.save(self.state_dict(), 'weight.pth')
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters())
@@ -49,10 +48,10 @@ class TransformerUNetGPT(pl.LightningModule):
 
 if __name__ == '__main__':
     transforms = transforms.Compose([])
-    length_log_2 = 11
+    length_log_2 = 3
     dataset = TextDataset('natsume.txt', 2**length_log_2, transforms)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=32, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
-    model = TransformerUNetGPT(length_log_2=length_log_2, depth_unet=10, depth_transformer=1)
+    model = TransformerUNetGPT(length_log_2=length_log_2, depth_unet=length_log_2-1, depth_transformer=1)
     trainer = pl.Trainer(devices=1, accelerator='gpu', max_epochs=500)
     trainer.fit(model, dataloader)
 

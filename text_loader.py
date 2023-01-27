@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 from typing import Tuple
 
 class TextDataset(Dataset):
-    def __init__(self, path: str, size: int, transforms) -> None:
+    def __init__(self, path: str, size: int, transforms=None) -> None:
         super().__init__()
         self.size = size
         self.transforms = transforms
@@ -13,9 +13,10 @@ class TextDataset(Dataset):
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
         data = self.text[index:index+self.size]
-        data = self.transforms(data)
         data_next = self.text[index+1:index+1+self.size]
-        data_next = self.transforms(data_next)
+        if self.transforms is not None:
+            data = self.transforms(data)
+            data_next = self.transforms(data_next)
         return data, data_next
 
     def __len__(self) -> int:
