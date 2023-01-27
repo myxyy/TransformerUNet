@@ -32,9 +32,10 @@ class TransformerUNetGPT(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         data, next = batch
         x = nn.functional.one_hot(data, 256).float()
-        x_next = nn.functional.one_hot(next, 256).float()
+        #x_next = nn.functional.one_hot(next, 256).float()
+        x_next = next
         x_hat = self.transformer_u_net(x)
-        loss = nn.CrossEntropyLoss()(x_hat, x_next)
+        loss = nn.CrossEntropyLoss()(x_hat.view(-1,256), x_next.view(-1))
         self.train_loss_epoch.update(loss)
         return loss
 
@@ -48,7 +49,7 @@ class TransformerUNetGPT(pl.LightningModule):
 
 if __name__ == '__main__':
     transforms = transforms.Compose([])
-    length_log_2 = 3
+    length_log_2 = 10
     dataset = TextDataset('natsume.txt', 2**length_log_2, transforms)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=32, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
     model = TransformerUNetGPT(length_log_2=length_log_2, depth_unet=length_log_2-1, depth_transformer=1)
