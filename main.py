@@ -11,9 +11,9 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 class TransformerUNetGPT(pl.LightningModule):
     logger: TensorBoardLogger
-    def __init__(self, length_log_2, depth_unet=3, depth_transformer=1, dim_scale=1, head_num=8):
+    def __init__(self, length_log_2, depth_unet=3, depth_transformer=1, dim_scale=1, head_num=8, dropout=0.5):
         super().__init__()
-        self.transformer_u_net = TransformerUNetSequence(length_log_2, depth_unet, depth_transformer, 256, dim_scale, head_num)
+        self.transformer_u_net = TransformerUNetSequence(length_log_2, depth_unet, depth_transformer, 256, dim_scale, head_num, dropout=0.5)
         self.apply(self._init_weights)
         self.train_loss_epoch = MeanMetric()
         self.validate_loss_epoch = MeanMetric()
@@ -52,7 +52,7 @@ if __name__ == '__main__':
     length_log_2 = 10
     dataset = TextDataset('natsume.txt', 2**length_log_2, transforms)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=32, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
-    model = TransformerUNetGPT(length_log_2=length_log_2, depth_unet=length_log_2-1, depth_transformer=1)
+    model = TransformerUNetGPT(length_log_2=length_log_2, depth_unet=length_log_2-1, depth_transformer=1, dim_scale=1.1)
     trainer = pl.Trainer(devices=1, accelerator='gpu', max_epochs=500)
     trainer.fit(model, dataloader)
 

@@ -45,7 +45,7 @@ class MultiHeadAttention(nn.Module):
         return out
 
 class DecoderBlock(nn.Module):
-    def __init__(self, dim_q, dim_kv, head_num, dropout=0.1):
+    def __init__(self, dim_q, dim_kv, head_num, dropout):
         super().__init__()
         self.layer_norm = nn.LayerNorm(dim_q)
         self.mmha_self = MultiHeadAttention(dim_q, dim_q, dim_q, dim_q//head_num, dim_q//head_num, head_num, dim_q)
@@ -79,14 +79,14 @@ class DecoderBlock(nn.Module):
         return query
 
 class TransformerDecoder(nn.Module):
-    def __init__(self, dim_q, dim_kv, head_num, depth):
+    def __init__(self, dim_q, dim_kv, head_num, depth, dropout):
         super().__init__()
-        decoder_block = DecoderBlock(dim_q, dim_kv, head_num)
+        decoder_block = DecoderBlock(dim_q, dim_kv, head_num, dropout)
         self.decoder_block_list = nn.ModuleList([copy.deepcopy(decoder_block) for i in range(depth)])
         self.layer_norm = nn.LayerNorm(dim_kv)
 
     def forward(self, query, key_value, mask_self, mask_cross):
         key_value_normed = self.layer_norm(key_value)
         for decoder_block in self.decoder_block_list:
-            query = decoder_block(query, key_value, mask_self, mask_cross)
+            query = decoder_block(query, key_value_normed, mask_self, mask_cross)
         return query
