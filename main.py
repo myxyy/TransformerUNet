@@ -10,7 +10,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 class GPTUNet(pl.LightningModule):
     logger: TensorBoardLogger
-    def __init__(self, length_log_2, depth_unet=3, depth_transformer=1, dim_scale=1, head_num=8, dropout=0.5):
+    def __init__(self, length_log_2, depth_unet=3, depth_transformer=1, dim_scale=1, head_num=16, dropout=0.1):
         super().__init__()
         self.length_log_2 = length_log_2
         self.transformer_u_net = TransformerUNetSequence(length_log_2, depth_unet, depth_transformer, 256, dim_scale, head_num, dropout=0.5)

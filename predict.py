@@ -6,7 +6,7 @@ import numpy as np
 
 np.set_printoptions(threshold=np.inf)
 
-length_log_2 = 9
+length_log_2 = 8
 model = GPTUNet(length_log_2=length_log_2, depth_unet=length_log_2-1, depth_transformer=4, dim_scale=1.1)
 model.load_state_dict(torch.load('weight.pth'))
 model = model.cuda()
@@ -15,9 +15,9 @@ prompt = '吾輩は猫である。\n'
 prompt = torch.from_numpy(np.array([i for i in prompt.encode('utf-8')]).astype(np.int)).clone().cuda()
 print(prompt)
 prompt_len = len(prompt)
-prompt = torch.nn.functional.pad(prompt, (0,1024-prompt_len),'constant',0)
+prompt = torch.nn.functional.pad(prompt, (0,2**length_log_2-prompt_len),'constant',0)
 
-while prompt_len < 1024:
+while prompt_len < 2**length_log_2:
     predict = model(prompt)
     p = predict[prompt_len]
     prompt[prompt_len] = p
