@@ -40,9 +40,9 @@ class GPTUNet(pl.LightningModule):
         return loss
 
     def forward(self, x):
-        x = nn.functional.one_hot(x, 256).view(1,2**self.length_log_2,256).float()
+        x = nn.functional.one_hot(x, 256).float()
         x_hat = self.transformer_u_net(x)
-        x_hat = x_hat.view(2**self.length_log_2,256).argmax(1)
+        x_hat = x_hat.softmax(2)
         return x_hat
 
     def training_epoch_end(self, outputs):
