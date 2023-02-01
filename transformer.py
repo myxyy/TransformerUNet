@@ -52,31 +52,29 @@ class DecoderBlock(nn.Module):
         self.mmha_cross = MultiHeadAttention(dim_q, dim_kv, dim_kv, dim_q//head_num, dim_q//head_num, head_num, dim_q)
         #self.mmha_self = MultiHeadAttention(dim_q, dim_q, dim_q, dim_q, dim_q, head_num, dim_q)
         #self.mmha_cross = MultiHeadAttention(dim_q, dim_kv, dim_kv, dim_q, dim_q, head_num, dim_q)
-        self.mlp1 = nn.Linear(dim_q, dim_q)
+        self.mlp1 = nn.Linear(dim_q, dim_q*2)
         self.act = nn.GELU()
-        self.mlp2 = nn.Linear(dim_q, dim_q)
-        self.dropout_1 = nn.Dropout(dropout)
-        self.dropout_2 = nn.Dropout(dropout)
-        self.dropout_3 = nn.Dropout(dropout)
+        self.mlp2 = nn.Linear(dim_q*2, dim_q)
+        self.dropout = nn.Dropout(dropout)
 
     # key_value is assumed to be layer-normalized
     def forward(self, query, key_value, mask_self, mask_cross):
 
-        query = self.layer_norm(query)
-        x = self.mmha_cross(query, key_value, key_value, mask_cross)
-        x = self.dropout_1(x)
+        x = self.layer_norm(query)
+        x = self.mmha_cross(x, key_value, key_value, mask_cross)
+        x = self.dropout(x)
         query = x + query
 
-        query = self.layer_norm(query)
-        x = self.mmha_self(query, query, query, mask_self)
-        x = self.dropout_2(x)
+        x = self.layer_norm(query)
+        x = self.mmha_self(x, x, x, mask_self)
+        x = self.dropout(x)
         query = x + query
 
-        query = self.layer_norm(query)
-        x = self.mlp1(query)
+        x = self.layer_norm(query)
+        x = self.mlp1(x)
         x = self.act(x)
         x = self.mlp2(x)
-        x = self.dropout_3(x)
+        x = self.dropout(x)
         query = x + query
         return query
 

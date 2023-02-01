@@ -9,11 +9,14 @@ import torch.nn as nn
 from pytorch_lightning.loggers import TensorBoardLogger
 
 class GPTUNet(pl.LightningModule):
-    logger: TensorBoardLogger
-    def __init__(self, length_log_2, depth_unet=3, depth_transformer=1, dim_scale=1, head_num=16, dropout=0.1):
+    #logger: TensorBoardLogger
+    def __init__(self, length_log_2, depth_unet, depth_transformer=1, dim_scale=1, head_num=16, dropout=0.1, vocab_size=256, dim=512):
         super().__init__()
+        self.vocab_size = vocab_size
         self.length_log_2 = length_log_2
-        self.transformer_u_net = TransformerUNetSequence(length_log_2, depth_unet, depth_transformer, 256, dim_scale, head_num, dropout=0.5)
+        self.transformer_u_net = TransformerUNetSequence(length_log_2, depth_unet, depth_transformer, dim, dim_scale, head_num, dropout=0.5)
+        self.token_in = nn.Linear(vocab_size, dim)
+        self.token_out = nn.Linear(dim, vocab_size)
         self.apply(self._init_weights)
         self.train_loss_epoch = MeanMetric()
         self.validate_loss_epoch = MeanMetric()
@@ -31,17 +34,17 @@ class GPTUNet(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         data, next = batch
-        x = nn.functional.one_hot(data, 256).float()
+        x = nn.functional.one_hot(data, self.vocab_size).float()
         #x_next = nn.functional.one_hot(next, 256).float()
         x_next = next
-        x_hat = self.transformer_u_net(x)
-        loss = nn.CrossEntropyLoss()(x_hat.view(-1,256), x_next.view(-1))
+        x_hat = self.token_out(self.transformer_u_net(self.token_in(x)))
+        loss = nn.CrossEntropyLoss()(x_hat.view(-1,self.vocab_size), x_next.view(-1))
         self.train_loss_epoch.update(loss)
         return loss
 
     def forward(self, x):
-        x = nn.functional.one_hot(x, 256).float()
-        x_hat = self.transformer_u_net(x)
+        x = nn.functional.one_hot(x, self.vocab_size).float()
+        x_hat = self.token_out(self.transformer_u_net(self.token_in(x)))
         x_hat = x_hat.softmax(2)
         return x_hat
 
@@ -50,6 +53,7 @@ class GPTUNet(pl.LightningModule):
         torch.save(self.state_dict(), 'weight.pth')
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters())
+        optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
         return optimizer
 
+model = GPTUNet(length_log_2=8, depth_unet=4, depth_transformer=4, dim_scale=1.1, dim=1024)

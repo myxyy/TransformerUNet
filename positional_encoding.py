@@ -16,7 +16,6 @@ class PositionalEncoding(nn.Module):
         self.pe[:, 0::2] = torch.cos(2 * math.pi * position / div_term)
         self.pe[:, 1::2] = torch.sin(2 * math.pi * position / div_term)
         self.shape = (len, d)
-        #self.pe = self.pe.cuda()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return x + self.pe

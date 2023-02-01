@@ -1,4 +1,4 @@
-from main import GPTUNet
+from main import GPTUNet, model
 import torchvision.transforms as transforms
 import torch
 import pytorch_lightning as pl
@@ -7,23 +7,31 @@ import numpy as np
 np.set_printoptions(threshold=np.inf)
 
 length_log_2 = 8
-model = GPTUNet(length_log_2=length_log_2, depth_unet=length_log_2-1, depth_transformer=4, dim_scale=1.1)
+length = 2**length_log_2
+vocab_size = 256
 model.load_state_dict(torch.load('weight.pth'))
 model = model.cuda()
 
-prompt = 'いつも'
+prompt = '吾輩は'
 prompt = torch.from_numpy(np.array([i for i in prompt.encode('utf-8')]).astype(np.int)).clone().cuda()
 print(prompt)
 prompt_len = len(prompt)
-prompt = torch.nn.functional.pad(prompt, (0,2**length_log_2-prompt_len),'constant',0)
+prompt = torch.nn.functional.pad(prompt, (0,length-prompt_len),'constant',0)
+
+print(prompt.shape)
 
 beam_width = 16
+predict_init = model(prompt.view(1,length))
+_, predict_init_i = predict_init.view(length, vocab_size)[prompt_len].topk(beam_width)
 prompt_beam = prompt.repeat(beam_width, 1)
+prompt_beam[:,prompt_len] = predict_init_i
+prompt_len = prompt_len + 1
 
-while prompt_len < 2**length_log_2:
+while prompt_len < length:
     predict_beam = model(prompt_beam)
-    _, predict_beam_i = predict_beam[:,prompt_len,:].contiguous().view(beam_width * 256).topk(beam_width)
-    prompt_beam[:,prompt_len][predict_beam_i // 256] = predict_beam_i % 256
+    _, predict_beam_i = predict_beam[:,prompt_len,:].contiguous().view(beam_width * vocab_size).topk(beam_width)
+    prompt_beam = prompt_beam[predict_beam_i // vocab_size]
+    prompt_beam[:,prompt_len] = predict_beam_i % vocab_size 
     prompt_len = prompt_len + 1
 
 predict = prompt_beam[0]
