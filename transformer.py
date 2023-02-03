@@ -38,7 +38,7 @@ class MultiHeadAttention(nn.Module):
         if mask is not None:
             QK = mask(QK)
 
-        softmax_QK = self.softmax(QK).nan_to_num(0)
+        softmax_QK = self.softmax(QK)
         QKV = torch.matmul(softmax_QK, V) # (batch, head_num, length_q, dim_V)
         QKV = QKV.permute(0,2,1,3).reshape(batch, length_q, self.head_num * self.dim_V)
         out = self.linear_out(QKV)

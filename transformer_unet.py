@@ -31,7 +31,7 @@ class TransformerUNetSequence(nn.Module):
         decoder_self_mask = self.self_mask_list[depth]
         encoder_cross_mask = self.encoder_cross_mask_list[depth]
         decoder_cross_mask = self.decoder_cross_mask_list[depth]
-        positional_encoding = self.positional_encoding_list[depth](torch.zeros(batch, *self.positional_encoding_list[depth].shape).cuda())
+        positional_encoding = self.positional_encoding_list[depth]().repeat(batch, 1, 1)
 
         y = encoder(positional_encoding, x, encoder_self_mask, encoder_cross_mask)
         y = self.unet_rec(y, depth + 1)
