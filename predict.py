@@ -13,7 +13,7 @@ model.load_state_dict(torch.load('weight.pth'))
 model = model.cuda()
 
 prompt = '吾輩は'
-prompt = torch.from_numpy(np.array([i for i in prompt.encode('utf-8')]).astype(np.int)).clone().cuda()
+prompt = torch.from_numpy(np.array([i for i in prompt.encode('utf-8')]).astype(int)).clone().cuda()
 print(prompt)
 prompt_len = len(prompt)
 prompt = torch.nn.functional.pad(prompt, (0,length-prompt_len),'constant',0)

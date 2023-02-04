@@ -39,7 +39,7 @@ class TransformerUNetSequence(nn.Module):
         decoder_cross_mask = self.decoder_cross_mask_list[depth]
         positional_encoding = self.positional_encoding_list[depth]().repeat(batch, 1, 1)
 
-        x = self_encoder_post(x, decoder_self_mask)
+        x = self_encoder_pre(x, decoder_self_mask)
         y = encoder(positional_encoding, x, encoder_cross_mask)
         y = self.unet_rec(y, depth + 1)
         x = self_encoder_middle(x, decoder_self_mask)
