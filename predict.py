@@ -22,14 +22,14 @@ print(prompt.shape)
 
 beam_width = 32
 predict_init = model(prompt.view(1,length))
-_, predict_init_i = predict_init.view(length, vocab_size)[prompt_len].topk(beam_width)
+_, predict_init_i = predict_init.view(length, vocab_size)[prompt_len-1].topk(beam_width)
 prompt_beam = prompt.repeat(beam_width, 1)
 prompt_beam[:,prompt_len] = predict_init_i
 prompt_len = prompt_len + 1
 
 while prompt_len < length:
     predict_beam = model(prompt_beam)
-    _, predict_beam_i = predict_beam[:,prompt_len,:].contiguous().view(beam_width * vocab_size).topk(beam_width)
+    _, predict_beam_i = predict_beam[:,prompt_len-1,:].contiguous().view(beam_width * vocab_size).topk(beam_width)
     prompt_beam = prompt_beam[predict_beam_i // vocab_size]
     prompt_beam[:,prompt_len] = predict_beam_i % vocab_size 
     prompt_len = prompt_len + 1
