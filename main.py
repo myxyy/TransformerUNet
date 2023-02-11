@@ -17,6 +17,7 @@ class GPTUNet(pl.LightningModule):
         self.transformer_u_net = TransformerUNetSequence(length_log_2, depth_unet, depth_transformer, dim, dim_scale, head_num, dropout=0.5)
         self.token_in = nn.Linear(vocab_size, dim)
         self.token_out = nn.Linear(dim, vocab_size)
+        self.num_parameters = sum(p.numel() for p in self.parameters() if p.requires_grad)
         self.apply(self._init_weights)
         self.train_loss_epoch = MeanMetric()
         self.validate_loss_epoch = MeanMetric()
@@ -25,7 +26,7 @@ class GPTUNet(pl.LightningModule):
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
+            trunc_normal_(m.weight, std=self.num_parameters**-0.5)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
@@ -56,4 +57,4 @@ class GPTUNet(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
         return optimizer
 
-model = GPTUNet(length_log_2=8, depth_unet=8, depth_transformer=2, dim_scale=1.1, dim=1024)
+model = GPTUNet(length_log_2=8, depth_unet=8, depth_transformer=2, dim_scale=1.1, dim=1024, dropout=0.2)
