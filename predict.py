@@ -6,8 +6,7 @@ import numpy as np
 
 np.set_printoptions(threshold=np.inf)
 
-length_log_2 = 8
-length = 2**length_log_2
+length = 256
 vocab_size = 256
 model.load_state_dict(torch.load('weight.pth'))
 model = model.cuda()

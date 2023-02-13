@@ -4,6 +4,7 @@ from mask import SelfMask, CrossEncodeMask, CrossDecodeMask
 
 import torch
 import torch.nn as nn
+import math
 
 class TransformerUNetSequence(nn.Module):
     class ResMLP(nn.Module):
@@ -23,27 +24,28 @@ class TransformerUNetSequence(nn.Module):
             x = self.dropout(x)
             return x + res
     
-    def __init__(self, length_log_2: int, depth_unet: int, depth_transformer: int, dim: int, dim_scale: float, head_num: int, dropout: int):
+    def __init__(self, length: int, downsample_rate: float, depth_unet: int, depth_transformer: int, dim: int, dim_scale: float, head_num: int, dropout: int):
         super().__init__()
-        if length_log_2 < depth_unet:
-            raise ValueError("TUNError")
-        self.length_log_2 = length_log_2
+        depth_unet = min(depth_unet, -(int)(math.log(length, downsample_rate)))
         self.depth_unet = depth_unet
-        self.encoder_list = nn.ModuleList([TransformerDecoder(dim*(int)(dim_scale**(i+1)), dim*(int)(dim_scale**i), head_num, depth_transformer, dropout) for i in range(depth_unet)])
-        self.decoder_list = nn.ModuleList([TransformerDecoder(dim*(int)(dim_scale**i), dim*(int)(dim_scale**(i+1)), head_num, depth_transformer, dropout) for i in range(depth_unet)])
-        self.self_encoder_pre_list = nn.ModuleList([TransformerEncoder(dim*(int)(dim_scale**i), head_num, depth_transformer, dropout) for i in range(depth_unet)])
-        self.self_encoder_middle_list = nn.ModuleList([TransformerEncoder(dim*(int)(dim_scale**i), head_num, depth_transformer, dropout) for i in range(depth_unet)])
-        self.self_encoder_post_list = nn.ModuleList([TransformerEncoder(dim*(int)(dim_scale**i), head_num, depth_transformer, dropout) for i in range(depth_unet)])
-        self.self_mask_list = nn.ModuleList([SelfMask(2**(length_log_2-i)) for i in range(depth_unet)])
-        self.encoder_cross_mask_list = nn.ModuleList([CrossEncodeMask(2**(length_log_2-i),2**(length_log_2-(i+1))) for i in range(depth_unet)])
-        self.decoder_cross_mask_list = nn.ModuleList([CrossDecodeMask(2**(length_log_2-(i+1)),2**(length_log_2-i)) for i in range(depth_unet)])
-        self.positional_encoding_init = PositionalEncoding(2 ** length_log_2, dim)
-        self.positional_encoding_list = nn.ModuleList([PositionalEncoding(2**(length_log_2-i-1), dim*(int)(dim_scale**(i+1))) for i in range(depth_unet)])
-        dim_last = dim*(int)(dim_scale**depth_unet)
-        self.ff_last_stacked = nn.Sequential(*[self.ResMLP(dim_last, dropout) for i in range(depth_transformer*3)])
+        self.dim = dim
+        self.dim_scale = dim_scale
+        self.encoder_list = nn.ModuleList([TransformerDecoder(self.level_i_dim(i+1), self.level_i_dim(i), head_num, depth_transformer, dropout) for i in range(depth_unet)])
+        self.decoder_list = nn.ModuleList([TransformerDecoder(self.level_i_dim(i), self.level_i_dim(i+1), head_num, depth_transformer, dropout) for i in range(depth_unet)])
+        self.self_encoder_pre_list = nn.ModuleList([TransformerEncoder(self.level_i_dim(i), head_num, depth_transformer, dropout) for i in range(depth_unet)])
+        self.self_encoder_middle_list = nn.ModuleList([TransformerEncoder(self.level_i_dim(i), head_num, depth_transformer, dropout) for i in range(depth_unet)])
+        self.self_encoder_post_list = nn.ModuleList([TransformerEncoder(self.level_i_dim(i), head_num, depth_transformer, dropout) for i in range(depth_unet)])
+        self.self_mask_list = nn.ModuleList([SelfMask((int)(length*(downsample_rate**i))) for i in range(depth_unet)])
+        self.encoder_cross_mask_list = nn.ModuleList([CrossEncodeMask((int)(length*(downsample_rate**i)),(int)(length*(downsample_rate**(i+1)))) for i in range(depth_unet)])
+        self.decoder_cross_mask_list = nn.ModuleList([CrossDecodeMask((int)(length*(downsample_rate**(i+1))),(int)(length*(downsample_rate**i))) for i in range(depth_unet)])
+        self.positional_encoding_init = PositionalEncoding(length, self.level_i_dim(0))
+        self.positional_encoding_list = nn.ModuleList([PositionalEncoding((int)(length*(downsample_rate**(i+1))), self.level_i_dim(i+1)) for i in range(depth_unet)])
+        self.ff_last_stacked = nn.Sequential(*[self.ResMLP(self.level_i_dim(depth_unet), dropout) for i in range(depth_transformer*3)])
 
+    def level_i_dim(self, i):
+        return (int)(math.ceil(self.dim*(self.dim_scale**i)/2)*2)
 
-    # (batch, 2**length_log_2, dim) -> (batch, 2**length_log_2, dim)
+    # (batch, length, dim) -> (batch, length, dim)
     def unet_rec(self, x: torch.Tensor, depth: int) -> torch.Tensor:
         if depth < self.depth_unet:
             batch = x.shape[0]
