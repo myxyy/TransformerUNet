@@ -10,10 +10,11 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 class GPTUNet(pl.LightningModule):
     #logger: TensorBoardLogger
-    def __init__(self, length, downsample_rate, depth_unet, depth_transformer=1, dim_scale=1, head_num=16, dropout=0.1, vocab_size=256, dim=512):
+    def __init__(self, length, downsample_rate, depth_unet, depth_transformer=1, dim_scale=1, head_num=16, dropout=0.1, vocab_size=256, dim=512, enable_pre=True, enable_middle=True, enable_post=True):
         super().__init__()
+        self.length = length
         self.vocab_size = vocab_size
-        self.transformer_u_net = TransformerUNetSequence(length, downsample_rate, depth_unet, depth_transformer, dim, dim_scale, head_num, dropout)
+        self.transformer_u_net = TransformerUNetSequence(length, downsample_rate, depth_unet, depth_transformer, dim, dim_scale, head_num, dropout, enable_pre=enable_pre, enable_middle=enable_middle, enable_post=enable_post)
         self.token_in = nn.Linear(vocab_size, dim)
         self.token_out = nn.Linear(dim, vocab_size)
         self.num_parameters = sum(p.numel() for p in self.parameters() if p.requires_grad)
@@ -56,4 +57,4 @@ class GPTUNet(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
         return optimizer
 
-model = GPTUNet(length=256, downsample_rate=0.5, depth_unet=8, depth_transformer=2, dim_scale=1.2, dim=64, dropout=0.2)
+model = GPTUNet(length=1024, downsample_rate=0.5, depth_unet=10, depth_transformer=1, dim_scale=1.2, dim=256, dropout=0.2, enable_pre=False, enable_post=False)

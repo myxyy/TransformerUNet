@@ -7,7 +7,7 @@ import os
 
 if __name__ == '__main__':
     transforms = transforms.Compose([])
-    length = 256
+    length = model.length
     dataset = TextDataset('data.txt', length, transforms)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=32, shuffle=True, num_workers=8, pin_memory=True, drop_last=True)
     #model = GPTUNet(length_log_2=length_log_2, depth_unet=6, depth_transformer=6, dim_scale=1.1)
