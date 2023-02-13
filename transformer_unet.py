@@ -38,8 +38,7 @@ class TransformerUNetSequence(nn.Module):
         self.self_mask_list = nn.ModuleList([SelfMask((int)(length*(downsample_rate**i))) for i in range(depth_unet)])
         self.encoder_cross_mask_list = nn.ModuleList([CrossEncodeMask((int)(length*(downsample_rate**i)),(int)(length*(downsample_rate**(i+1)))) for i in range(depth_unet)])
         self.decoder_cross_mask_list = nn.ModuleList([CrossDecodeMask((int)(length*(downsample_rate**(i+1))),(int)(length*(downsample_rate**i))) for i in range(depth_unet)])
-        self.positional_encoding_init = PositionalEncoding(length, self.level_i_dim(0))
-        self.positional_encoding_list = nn.ModuleList([PositionalEncoding((int)(length*(downsample_rate**(i+1))), self.level_i_dim(i+1)) for i in range(depth_unet)])
+        self.positional_encoding_list = nn.ModuleList([PositionalEncoding((int)(length*(downsample_rate**i)), self.level_i_dim(i)) for i in range(depth_unet+1)])
         self.ff_last_stacked = nn.Sequential(*[self.ResMLP(self.level_i_dim(depth_unet), dropout) for i in range(depth_transformer*3)])
 
     def level_i_dim(self, i):
@@ -57,7 +56,7 @@ class TransformerUNetSequence(nn.Module):
             self_mask = self.self_mask_list[depth]
             encoder_cross_mask = self.encoder_cross_mask_list[depth]
             decoder_cross_mask = self.decoder_cross_mask_list[depth]
-            positional_encoding = self.positional_encoding_list[depth]().repeat(batch, 1, 1)
+            positional_encoding = self.positional_encoding_list[depth+1]().repeat(batch, 1, 1)
 
             x = self_encoder_pre(x, self_mask)
             y = encoder(positional_encoding, x, encoder_cross_mask)
@@ -70,5 +69,5 @@ class TransformerUNetSequence(nn.Module):
         return x
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.unet_rec(self.positional_encoding_init(x), 0)
+        return self.unet_rec(self.positional_encoding_list[0](x), 0)
        

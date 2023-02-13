@@ -56,4 +56,4 @@ class GPTUNet(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
         return optimizer
 
-model = GPTUNet(length=256, downsample_rate=0.5, depth_unet=8, depth_transformer=2, dim_scale=1, dim=1024, dropout=0.2)
+model = GPTUNet(length=256, downsample_rate=0.5, depth_unet=8, depth_transformer=2, dim_scale=1.2, dim=64, dropout=0.2)
