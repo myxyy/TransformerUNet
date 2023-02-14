@@ -9,8 +9,8 @@ import torch.nn as nn
 from pytorch_lightning.loggers import TensorBoardLogger
 
 class GPTUNet(pl.LightningModule):
-    #logger: TensorBoardLogger
-    def __init__(self, length, downsample_rate, depth_unet, depth_transformer=1, dim_scale=1, head_num=16, dropout=0.1, vocab_size=256, dim=512, enable_pre=True, enable_middle=True, enable_post=True):
+    logger: TensorBoardLogger
+    def __init__(self, length, downsample_rate, depth_unet, depth_transformer=1, dim_scale=1, head_num=8, dropout=0.1, vocab_size=256, dim=512, enable_pre=True, enable_middle=True, enable_post=True):
         super().__init__()
         self.length = length
         self.vocab_size = vocab_size
@@ -57,4 +57,4 @@ class GPTUNet(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
         return optimizer
 
-model = GPTUNet(length=1024, downsample_rate=0.5, depth_unet=10, depth_transformer=1, dim_scale=1.2, dim=256, dropout=0.2, enable_pre=False, enable_post=False)
+model = GPTUNet(length=1024, downsample_rate=0.5, depth_unet=10, depth_transformer=2, dim_scale=1.2, dim=256, dropout=0.2, enable_pre=True, enable_middle=True, enable_post=True)
