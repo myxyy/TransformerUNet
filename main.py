@@ -19,10 +19,9 @@ class GPTUNet(pl.LightningModule):
         self.token_out = nn.Linear(dim, vocab_size)
         self.num_parameters = sum(p.numel() for p in self.parameters() if p.requires_grad)
         self.apply(self._init_weights)
-        self.train_loss_epoch = MeanMetric()
-        self.validate_loss_epoch = MeanMetric()
-        self.train_loss_epoch.reset()
-        self.validate_loss_epoch.reset()
+
+        self.train_loss_step = MeanMetric()
+        self.train_loss_step.reset()
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
@@ -40,8 +39,13 @@ class GPTUNet(pl.LightningModule):
         x_next = next
         x_hat = self.token_out(self.transformer_u_net(self.token_in(x)))
         loss = nn.CrossEntropyLoss()(x_hat.view(-1,self.vocab_size), x_next.view(-1))
-        self.train_loss_epoch.update(loss)
-        return loss
+        self.train_loss_step.update(loss)
+        return {"loss": loss, "batch_idx": batch_idx}
+
+    def training_step_end(self, batch_parts):
+        if batch_parts["batch_idx"] % 100 == 0:
+            self.log("train loss", self.train_loss_step.compute(), on_step=True, on_epoch=True)
+            self.train_loss_step.reset()
 
     def forward(self, x):
         x = nn.functional.one_hot(x, self.vocab_size).float()
@@ -50,11 +54,21 @@ class GPTUNet(pl.LightningModule):
         return x_hat
 
     def training_epoch_end(self, outputs):
-        self.train_loss_epoch.reset()
         torch.save(self.state_dict(), 'weight.pth')
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
         return optimizer
 
-model = GPTUNet(length=1024, downsample_rate=0.5, depth_unet=10, depth_transformer=2, dim_scale=1.2, dim=256, dropout=0.2, enable_pre=True, enable_middle=True, enable_post=True)
+model = GPTUNet(
+    length=1024,
+    downsample_rate=0.5,
+    depth_unet=10,
+    depth_transformer=2,
+    dim_scale=1.2,
+    dim=256,
+    dropout=0.2,
+    enable_pre=False,
+    enable_middle=True,
+    enable_post=False
+)

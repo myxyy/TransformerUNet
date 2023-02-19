@@ -1,4 +1,4 @@
 *.txt
 __pycache__
-lightning_logs
+lightning_logs*
 *.pth
