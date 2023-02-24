@@ -20,9 +20,6 @@ class GPTUNet(pl.LightningModule):
         self.num_parameters = sum(p.numel() for p in self.parameters() if p.requires_grad)
         self.apply(self._init_weights)
 
-        self.train_loss_step = MeanMetric()
-        self.train_loss_step.reset()
-
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=self.num_parameters**-0.5)
@@ -39,13 +36,8 @@ class GPTUNet(pl.LightningModule):
         x_next = next
         x_hat = self.token_out(self.transformer_u_net(self.token_in(x)))
         loss = nn.CrossEntropyLoss()(x_hat.view(-1,self.vocab_size), x_next.view(-1))
-        self.train_loss_step.update(loss)
-        return {"loss": loss, "batch_idx": batch_idx}
-
-    def training_step_end(self, batch_parts):
-        if batch_parts["batch_idx"] % 100 == 0:
-            self.log("train loss", self.train_loss_step.compute(), on_step=True, on_epoch=True)
-            self.train_loss_step.reset()
+        self.log("train_loss", loss, on_epoch=False)
+        return loss
 
     def forward(self, x):
         x = nn.functional.one_hot(x, self.vocab_size).float()
