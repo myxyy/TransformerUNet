@@ -164,13 +164,13 @@ class SparseMHAEncoder(nn.Module):
         QK_table = torch.zeros(batch, self.head_num, self.span, length_q).cuda() # (batch, head_num, span, length_q)
         QK_table[:,:,vkvi_row,vkvi_column] = torch.matmul(Q[:,:,column[vkvi_row,vkvi_column],:].unsqueeze(3), K[:,:,kvi[vkvi_row,vkvi_column],:].unsqueeze(4)).reshape(batch,self.head_num,len(vkvi_row))/(self.dim_QK ** 0.5)
         QK_table[:,:,ivkvi_row,ivkvi_column] = torch.tensor(-float('inf'))
-        QKs_table = QK_table.softmax(3) # (batch, head_num, span, length_q)
+        QKs_table = QK_table.softmax(2) # (batch, head_num, span, length_q)
         QKs_table_V = QKs_table.unsqueeze(4).repeat(1,1,1,1,self.dim_V) # (batch, head_num, span, length_q, dim_V)
         QKs_table_V[:,:,vkvi_row, vkvi_column,:] *= V[:,:,kvi[vkvi_row, vkvi_column],:]
         QKV_table = QKs_table_V
         QKV = QKV_table.sum(2).permute(0,2,1,3).reshape(batch, length_q, self.head_num * self.dim_V)
         out = self.linear_out(QKV)
-        #print(f'length_q:{length_q}, length_kv:{length_kv}, len(vkvi_row):{len(vkvi_row)}')
+        #print(f'length_q:{length_q}, length_kv:{length_kv}, len(vkvi_row):{len(vkvi_row)}, len(ivkvi_row):{len(ivkvi_row)}')
         return out
 
 class SparseSelfTransformerBlock(nn.Module):

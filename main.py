@@ -100,7 +100,7 @@ class SparseGPTUNet(pl.LightningModule):
 model = SparseGPTUNet(
     length=1024,
     downsample_rate=0.5,
-    depth_unet=8,
+    depth_unet=10,
     depth_transformer=2,
     dim_scale=1.2,
     dim=256,
