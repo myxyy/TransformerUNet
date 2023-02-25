@@ -48,7 +48,6 @@ class DecoderBlock(nn.Module):
     def __init__(self, dim_q, dim_kv, head_num, dropout):
         super().__init__()
         self.layer_norm = nn.LayerNorm(dim_q)
-        self.mmha_self = MultiHeadAttention(dim_q, dim_q, dim_q, dim_q//head_num, dim_q//head_num, head_num, dim_q)
         self.mmha_cross = MultiHeadAttention(dim_q, dim_kv, dim_kv, dim_q//head_num, dim_q//head_num, head_num, dim_q)
         self.mlp1 = nn.Linear(dim_q, dim_q*2)
         self.mlp2 = nn.Linear(dim_q*2, dim_q)
@@ -157,7 +156,7 @@ class SparseMHAEncoder(nn.Module):
         # print(f"Q.shape:{Q.shape}")
         # print(f"K.shape:{K.shape}")
         # print(f"V.shape:{V.shape}")
-        row, column = torch.meshgrid(torch.arange(self.span), torch.arange(length_q))
+        row, column = torch.meshgrid(torch.arange(self.span), torch.arange(length_q), indexing='ij')
         kvi = row - (self.span-1) + torch.arange(0,self.stride*length_q,self.stride) # key-value index
         is_valid_kv = torch.logical_and(kvi >= 0, kvi < length_kv)
         vkvi_row, vkvi_column = torch.where(is_valid_kv) # valid key-value index
@@ -171,6 +170,7 @@ class SparseMHAEncoder(nn.Module):
         QKV_table = QKs_table_V
         QKV = QKV_table.sum(2).permute(0,2,1,3).reshape(batch, length_q, self.head_num * self.dim_V)
         out = self.linear_out(QKV)
+        #print(f'length_q:{length_q}, length_kv:{length_kv}, len(vkvi_row):{len(vkvi_row)}')
         return out
 
 class SparseSelfTransformerBlock(nn.Module):
@@ -209,5 +209,45 @@ class SparseSelfTransformer(nn.Module):
     def forward(self, query):
         for encoder_block in self.encoder_block_list:
             query = encoder_block(query)
+        return query
+
+class SparseCrossTransformerEncoderBlock(nn.Module):
+    def __init__(self, dim_q, dim_kv, head_num, dropout, span, stride):
+        super().__init__()
+        self.layer_norm = nn.LayerNorm(dim_q)
+        self.mmha_cross = SparseMHAEncoder(dim_q, dim_kv, dim_kv, dim_q//head_num, dim_q//head_num, head_num, dim_q, span, stride)
+        self.mlp1 = nn.Linear(dim_q, dim_q*2)
+        self.mlp2 = nn.Linear(dim_q*2, dim_q)
+        self.act = nn.GELU()
+        self.dropout = nn.Dropout(dropout)
+
+    # key_value is assumed to be layer-normalized
+    def forward(self, query, key_value):
+
+        x = self.layer_norm(query)
+        x = self.mmha_cross(x, key_value, key_value)
+        x = self.dropout(x)
+        query = x + query
+
+        x = self.layer_norm(query)
+        x = self.mlp1(x)
+        x = self.act(x)
+        x = self.mlp2(x)
+        x = self.dropout(x)
+        query = x + query
+
+        return query
+
+class SparseCrossTransformerEncoder(nn.Module):
+    def __init__(self, dim_q, dim_kv, head_num, depth, dropout, span, stride):
+        super().__init__()
+        decoder_block = SparseCrossTransformerEncoderBlock(dim_q, dim_kv, head_num, dropout, span, stride)
+        self.decoder_block_list = nn.ModuleList([copy.deepcopy(decoder_block) for i in range(depth)])
+        self.layer_norm = nn.LayerNorm(dim_kv)
+
+    def forward(self, query, key_value, mask_cross):
+        key_value_normed = self.layer_norm(key_value)
+        for decoder_block in self.decoder_block_list:
+            query = decoder_block(query, key_value_normed)
         return query
 

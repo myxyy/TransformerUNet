@@ -1,5 +1,5 @@
 from transformer import TransformerDecoder, TransformerEncoder
-from transformer import SparseSelfTransformer
+from transformer import SparseSelfTransformer, SparseCrossTransformerEncoder
 from positional_encoding import PositionalEncoding
 from mask import SelfMask, CrossEncodeMask, CrossDecodeMask
 
@@ -77,7 +77,7 @@ class SparseTransformerUNetSequence(nn.Module):
         self.depth_unet = depth_unet
         self.dim = dim
         self.dim_scale = dim_scale
-        self.encoder_list = nn.ModuleList([TransformerDecoder(self.level_i_dim(i+1), self.level_i_dim(i), head_num, depth_transformer, dropout) for i in range(depth_unet)])
+        self.encoder_list = nn.ModuleList([SparseCrossTransformerEncoder(self.level_i_dim(i+1), self.level_i_dim(i), head_num, depth_transformer, dropout, 4, 2) for i in range(depth_unet)])
         self.decoder_list = nn.ModuleList([TransformerDecoder(self.level_i_dim(i), self.level_i_dim(i+1), head_num, depth_transformer, dropout) for i in range(depth_unet)])
         if enable_pre:
             self.self_encoder_pre_list = nn.ModuleList([SparseSelfTransformer(self.level_i_dim(i), head_num, depth_transformer, dropout, 4, 1) for i in range(depth_unet+1)])
@@ -88,12 +88,14 @@ class SparseTransformerUNetSequence(nn.Module):
         self.encoder_cross_mask_list = nn.ModuleList([CrossEncodeMask((int)(length*(downsample_rate**i)),(int)(length*(downsample_rate**(i+1)))) for i in range(depth_unet)])
         self.decoder_cross_mask_list = nn.ModuleList([CrossDecodeMask((int)(length*(downsample_rate**(i+1))),(int)(length*(downsample_rate**i))) for i in range(depth_unet)])
         self.positional_encoding_list = nn.ModuleList([PositionalEncoding((int)(length*(downsample_rate**i)), self.level_i_dim(i)) for i in range(depth_unet+1)])
+        self.self_mask_list = nn.ModuleList([SelfMask((int)(length*(downsample_rate**i))) for i in range(depth_unet+1)])
 
     def level_i_dim(self, i):
         return (int)(math.ceil(self.dim*(self.dim_scale**i)/2)*2)
 
     # (batch, length, dim) -> (batch, length, dim)
     def unet_rec(self, x: torch.Tensor, depth: int) -> torch.Tensor:
+        self_mask = self.self_mask_list[depth]
         if depth < self.depth_unet:
             batch = x.shape[0]
             encoder = self.encoder_list[depth]
