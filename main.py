@@ -1,5 +1,6 @@
 from transformer_unet import TransformerUNetSequence
 from transformer_unet import SparseTransformerUNetSequence
+from transformer_unet import SparseTransformerUNetSequenceOptimized
 
 import pytorch_lightning as pl
 from timm.models.layers import trunc_normal_
@@ -15,7 +16,7 @@ class GPTUNet(pl.LightningModule):
         super().__init__()
         self.length = length
         self.vocab_size = vocab_size
-        self.transformer_u_net = TransformerUNetSequence(length, downsample_rate, depth_unet, depth_transformer, dim, dim_scale, head_num, dropout, enable_pre=enable_pre, enable_middle=enable_middle, enable_post=enable_post)
+        self.transformer_u_net = SparseTransformerUNetSequenceOptimized(length, downsample_rate, depth_unet, depth_transformer, dim, dim_scale, head_num, dropout, enable_pre=enable_pre, enable_middle=enable_middle, enable_post=enable_post)
         self.token_in = nn.Linear(vocab_size, dim)
         self.token_out = nn.Linear(dim, vocab_size)
         self.num_parameters = sum(p.numel() for p in self.parameters() if p.requires_grad)
