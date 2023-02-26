@@ -133,7 +133,7 @@ class SparseTransformerUNetSequenceOptimized(nn.Module):
         self.dim = dim
         self.dim_scale = dim_scale
         self.encoder_list = nn.ModuleList([SparseCrossTransformerEncoderOptimized(self.level_i_dim(i+1), self.level_i_dim(i), head_num, depth_transformer, dropout, span, (int)(1/downsample_rate)) for i in range(depth_unet)])
-        self.decoder_list = nn.ModuleList([SparseCrossTransformerDecoderOptimized(self.level_i_dim(i), self.level_i_dim(i+1), head_num, depth_transformer, dropout, span, (int)(1/downsample_rate)) for i in range(depth_unet)])
+        self.decoder_list = nn.ModuleList([SparseCrossTransformerDecoderOptimized(self.level_i_dim(i), self.level_i_dim(i+1), head_num, depth_transformer, dropout, span, (int)(1/downsample_rate), (int)(length*(downsample_rate**i)), (int)(length*(downsample_rate**(i+1)))) for i in range(depth_unet)])
         if enable_pre:
             self.self_encoder_pre_list = nn.ModuleList([SparseSelfTransformerOptimized(self.level_i_dim(i), head_num, depth_transformer, dropout, span, 1) for i in range(depth_unet+1)])
         if enable_middle:
