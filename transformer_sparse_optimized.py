@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 class SparseMHAEncoder(nn.Module):
-    def __init__(self, dim_q, dim_k, dim_v, dim_QK, dim_V, head_num, dim_out, span, stride):
+    def __init__(self, dim_q, dim_k, dim_v, dim_QK, dim_V, head_num, dim_out, span, stride, length_q, length_kv):
         super().__init__()
         self.head_num = head_num
         self.dim_QK = dim_QK
@@ -15,6 +15,12 @@ class SparseMHAEncoder(nn.Module):
         self.softmax = nn.Softmax(dim=3)
         self.span = span
         self.stride = stride
+        self.length_q = length_q
+        self.length_kv = length_kv
+        self.row, self.column = torch.meshgrid(torch.arange(self.span), torch.arange(length_q), indexing='ij')
+        self.kvi = self.row - (self.span-1) + torch.arange(0,self.stride*length_q,self.stride) # key-value index
+        self.is_valid_kvi = torch.logical_and(self.kvi >= 0, self.kvi < length_kv)
+        self.vkvi_row, self.vkvi_column = torch.where(self.is_valid_kvi) # valid key-value index
 
     # (batch, length_q, dim_q)
     # (batch, length_kv, dim_k)
@@ -22,40 +28,34 @@ class SparseMHAEncoder(nn.Module):
     # -> (batch, length_q, dim_out)
     def forward(self, q, k, v):
         batch = q.shape[0]
-        length_q = q.shape[1]
-        length_kv = k.shape[1]
 
         Q = self.qQ(q) # (batch, length_q, head_num * dim_QK)
         K = self.kK(k) # (batch, length_kv, head_num * dim_QK)
         V = self.vV(v) # (batch, length_kv, head_num * dim_V)
         
-        Q = Q.view(batch, length_q, self.head_num, self.dim_QK).permute(0,2,1,3) # (batch, head_num, length_q, dim_QK)
-        K = K.view(batch, length_kv, self.head_num, self.dim_QK).permute(0,2,1,3) # (batch, head_num, length_kv, dim_QK)
-        V = V.view(batch, length_kv, self.head_num, self.dim_V).permute(0,2,1,3) # (batch, head_num, length_kv, dim_V)
+        Q = Q.view(batch, self.length_q, self.head_num, self.dim_QK).permute(0,2,1,3) # (batch, head_num, length_q, dim_QK)
+        K = K.view(batch, self.length_kv, self.head_num, self.dim_QK).permute(0,2,1,3) # (batch, head_num, length_kv, dim_QK)
+        V = V.view(batch, self.length_kv, self.head_num, self.dim_V).permute(0,2,1,3) # (batch, head_num, length_kv, dim_V)
 
         # print(f"Q.shape:{Q.shape}")
         # print(f"K.shape:{K.shape}")
         # print(f"V.shape:{V.shape}")
-        row, column = torch.meshgrid(torch.arange(self.span), torch.arange(length_q), indexing='ij')
-        kvi = row - (self.span-1) + torch.arange(0,self.stride*length_q,self.stride) # key-value index
-        is_valid_kvi = torch.logical_and(kvi >= 0, kvi < length_kv)
-        vkvi_row, vkvi_column = torch.where(is_valid_kvi) # valid key-value index
-        QK_table = torch.full((batch, self.head_num, self.span, length_q), -float('inf')).cuda() # (batch, head_num, span, length_q)
-        QK_table[:,:,vkvi_row,vkvi_column] = torch.matmul(Q[:,:,column[vkvi_row,vkvi_column],:].unsqueeze(3), K[:,:,kvi[vkvi_row,vkvi_column],:].unsqueeze(4)).reshape(batch,self.head_num,len(vkvi_row))/(self.dim_QK ** 0.5)
+        QK_table = torch.full((batch, self.head_num, self.span, self.length_q), -float('inf')).cuda() # (batch, head_num, span, length_q)
+        QK_table[:,:,self.vkvi_row,self.vkvi_column] = torch.matmul(Q[:,:,self.column[self.vkvi_row,self.vkvi_column],:].unsqueeze(3), K[:,:,self.kvi[self.vkvi_row,self.vkvi_column],:].unsqueeze(4)).reshape(batch,self.head_num,len(self.vkvi_row))/(self.dim_QK ** 0.5)
         QKs_table = QK_table.softmax(2) # (batch, head_num, span, length_q)
         QKs_table_V = QKs_table.unsqueeze(4).repeat(1,1,1,1,self.dim_V) # (batch, head_num, span, length_q, dim_V)
-        QKs_table_V[:,:,vkvi_row, vkvi_column,:] *= V[:,:,kvi[vkvi_row, vkvi_column],:]
+        QKs_table_V[:,:,self.vkvi_row, self.vkvi_column,:] *= V[:,:,self.kvi[self.vkvi_row, self.vkvi_column],:]
         QKV_table = QKs_table_V
-        QKV = QKV_table.sum(2).permute(0,2,1,3).reshape(batch, length_q, self.head_num * self.dim_V)
+        QKV = QKV_table.sum(2).permute(0,2,1,3).reshape(batch, self.length_q, self.head_num * self.dim_V)
         out = self.linear_out(QKV)
         #print(f'length_q:{length_q}, length_kv:{length_kv}, len(vkvi_row):{len(vkvi_row)}, len(ivkvi_row):{len(ivkvi_row)}')
         return out
 
 class SparseSelfTransformerBlock(nn.Module):
-    def __init__(self, dim_q, head_num, dropout, span, stride):
+    def __init__(self, dim_q, head_num, dropout, span, stride, length_q, length_kv):
         super().__init__()
         self.layer_norm = nn.LayerNorm(dim_q)
-        self.mmha_self = SparseMHAEncoder(dim_q, dim_q, dim_q, dim_q//head_num, dim_q//head_num, head_num, dim_q, span, stride)
+        self.mmha_self = SparseMHAEncoder(dim_q, dim_q, dim_q, dim_q//head_num, dim_q//head_num, head_num, dim_q, span, stride, length_q, length_kv)
         self.mlp1 = nn.Linear(dim_q, dim_q*2)
         self.mlp2 = nn.Linear(dim_q*2, dim_q)
         self.act = nn.GELU()
@@ -79,9 +79,9 @@ class SparseSelfTransformerBlock(nn.Module):
         return query
 
 class SparseSelfTransformerOptimized(nn.Module):
-    def __init__(self, dim_q, head_num, depth, dropout, span, stride):
+    def __init__(self, dim_q, head_num, depth, dropout, span, stride, length_q, length_kv):
         super().__init__()
-        encoder_block = SparseSelfTransformerBlock(dim_q, head_num, dropout, span, stride)
+        encoder_block = SparseSelfTransformerBlock(dim_q, head_num, dropout, span, stride, length_q, length_kv)
         self.encoder_block_list = nn.ModuleList([copy.deepcopy(encoder_block) for i in range(depth)])
 
     def forward(self, query):
@@ -90,10 +90,10 @@ class SparseSelfTransformerOptimized(nn.Module):
         return query
 
 class SparseCrossTransformerEncoderBlock(nn.Module):
-    def __init__(self, dim_q, dim_kv, head_num, dropout, span, stride):
+    def __init__(self, dim_q, dim_kv, head_num, dropout, span, stride, length_q, length_kv):
         super().__init__()
         self.layer_norm = nn.LayerNorm(dim_q)
-        self.mmha_cross = SparseMHAEncoder(dim_q, dim_kv, dim_kv, dim_q//head_num, dim_q//head_num, head_num, dim_q, span, stride)
+        self.mmha_cross = SparseMHAEncoder(dim_q, dim_kv, dim_kv, dim_q//head_num, dim_q//head_num, head_num, dim_q, span, stride, length_q, length_kv)
         self.mlp1 = nn.Linear(dim_q, dim_q*2)
         self.mlp2 = nn.Linear(dim_q*2, dim_q)
         self.act = nn.GELU()
@@ -117,9 +117,9 @@ class SparseCrossTransformerEncoderBlock(nn.Module):
         return query
 
 class SparseCrossTransformerEncoderOptimized(nn.Module):
-    def __init__(self, dim_q, dim_kv, head_num, depth, dropout, span, stride):
+    def __init__(self, dim_q, dim_kv, head_num, depth, dropout, span, stride, length_q, length_kv):
         super().__init__()
-        decoder_block = SparseCrossTransformerEncoderBlock(dim_q, dim_kv, head_num, dropout, span, stride)
+        decoder_block = SparseCrossTransformerEncoderBlock(dim_q, dim_kv, head_num, dropout, span, stride, length_q, length_kv)
         self.decoder_block_list = nn.ModuleList([copy.deepcopy(decoder_block) for i in range(depth)])
         self.layer_norm = nn.LayerNorm(dim_kv)
 

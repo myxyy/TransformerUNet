@@ -132,14 +132,14 @@ class SparseTransformerUNetSequenceOptimized(nn.Module):
         self.depth_unet = depth_unet
         self.dim = dim
         self.dim_scale = dim_scale
-        self.encoder_list = nn.ModuleList([SparseCrossTransformerEncoderOptimized(self.level_i_dim(i+1), self.level_i_dim(i), head_num, depth_transformer, dropout, span, (int)(1/downsample_rate)) for i in range(depth_unet)])
+        self.encoder_list = nn.ModuleList([SparseCrossTransformerEncoderOptimized(self.level_i_dim(i+1), self.level_i_dim(i), head_num, depth_transformer, dropout, span, (int)(1/downsample_rate), (int)(length*(downsample_rate**(i+1))), (int)(length*(downsample_rate**i))) for i in range(depth_unet)])
         self.decoder_list = nn.ModuleList([SparseCrossTransformerDecoderOptimized(self.level_i_dim(i), self.level_i_dim(i+1), head_num, depth_transformer, dropout, span, (int)(1/downsample_rate), (int)(length*(downsample_rate**i)), (int)(length*(downsample_rate**(i+1)))) for i in range(depth_unet)])
         if enable_pre:
-            self.self_encoder_pre_list = nn.ModuleList([SparseSelfTransformerOptimized(self.level_i_dim(i), head_num, depth_transformer, dropout, span, 1) for i in range(depth_unet+1)])
+            self.self_encoder_pre_list = nn.ModuleList([SparseSelfTransformerOptimized(self.level_i_dim(i), head_num, depth_transformer, dropout, span, 1, (int)(length*(downsample_rate**i)), (int)(length*(downsample_rate**i))) for i in range(depth_unet+1)])
         if enable_middle:
-            self.self_encoder_middle_list = nn.ModuleList([SparseSelfTransformerOptimized(self.level_i_dim(i), head_num, depth_transformer, dropout, span, 1) for i in range(depth_unet+1)])
+            self.self_encoder_middle_list = nn.ModuleList([SparseSelfTransformerOptimized(self.level_i_dim(i), head_num, depth_transformer, dropout, span, 1, (int)(length*(downsample_rate**i)), (int)(length*(downsample_rate**i))) for i in range(depth_unet+1)])
         if enable_post:
-            self.self_encoder_post_list = nn.ModuleList([SparseSelfTransformerOptimized(self.level_i_dim(i), head_num, depth_transformer, dropout, span, 1) for i in range(depth_unet+1)])
+            self.self_encoder_post_list = nn.ModuleList([SparseSelfTransformerOptimized(self.level_i_dim(i), head_num, depth_transformer, dropout, span, 1, (int)(length*(downsample_rate**i)), (int)(length*(downsample_rate**i))) for i in range(depth_unet+1)])
         self.positional_encoding_list = nn.ModuleList([PositionalEncoding((int)(length*(downsample_rate**i)), self.level_i_dim(i)) for i in range(depth_unet+1)])
 
     def level_i_dim(self, i):
