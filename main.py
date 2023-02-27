@@ -142,7 +142,7 @@ class SparseGPTUNetOptimized(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
         return optimizer
 
-model = SparseGPTUNetOptimized(
+model = GPTUNet(
     length=1024,
     downsample_rate=0.5,
     depth_unet=10,
