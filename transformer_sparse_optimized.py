@@ -21,6 +21,7 @@ class SparseMHAEncoder(nn.Module):
         self.kvi = self.row - (self.span-1) + torch.arange(0,self.stride*length_q,self.stride) # key-value index
         self.is_valid_kvi = torch.logical_and(self.kvi >= 0, self.kvi < length_kv)
         self.vkvi_row, self.vkvi_column = torch.where(self.is_valid_kvi) # valid key-value index
+        self.ivkvi_row, self.ivkvi_column = torch.where(~self.is_valid_kvi) # invalid key-value index
 
     # (batch, length_q, dim_q)
     # (batch, length_kv, dim_k)
@@ -40,8 +41,9 @@ class SparseMHAEncoder(nn.Module):
         # print(f"Q.shape:{Q.shape}")
         # print(f"K.shape:{K.shape}")
         # print(f"V.shape:{V.shape}")
-        QK_table = torch.full((batch, self.head_num, self.span, self.length_q), -float('inf')).cuda() # (batch, head_num, span, length_q)
+        QK_table = torch.empty((batch, self.head_num, self.span, self.length_q), device='cuda') # (batch, head_num, span, length_q)
         QK_table[:,:,self.vkvi_row,self.vkvi_column] = torch.matmul(Q[:,:,self.column[self.vkvi_row,self.vkvi_column],:].unsqueeze(3), K[:,:,self.kvi[self.vkvi_row,self.vkvi_column],:].unsqueeze(4)).reshape(batch,self.head_num,len(self.vkvi_row))/(self.dim_QK ** 0.5)
+        QK_table[:,:,self.ivkvi_row,self.ivkvi_column] = -float('inf')
         QKs_table = QK_table.softmax(2) # (batch, head_num, span, length_q)
         QKs_table_V = QKs_table.unsqueeze(4).repeat(1,1,1,1,self.dim_V) # (batch, head_num, span, length_q, dim_V)
         QKs_table_V[:,:,self.vkvi_row, self.vkvi_column,:] *= V[:,:,self.kvi[self.vkvi_row, self.vkvi_column],:]
@@ -149,6 +151,7 @@ class SparseMHADecoder(nn.Module):
         self.qi_row = -self.stride * self.qi_column + self.column
         self.is_valid_qi = torch.logical_and(torch.logical_and(self.qi_row >= 0, self.qi_row < self.span),torch.logical_and(self.qi_column >= 0, self.qi_column < length_kv))
         self.vqi_row, self.vqi_column = torch.where(self.is_valid_qi)
+        self.ivqi_row, self.ivqi_column = torch.where(~self.is_valid_qi)
 
     # (batch, length_q, dim_q)
     # (batch, length_kv, dim_k)
@@ -168,8 +171,9 @@ class SparseMHADecoder(nn.Module):
         # print(f"Q.shape:{Q.shape}")
         # print(f"K.shape:{K.shape}")
         # print(f"V.shape:{V.shape}")
-        QK_table = torch.full((batch, self.head_num, self.span // self.stride, self.length_q), -float('inf')).cuda()
+        QK_table = torch.empty((batch, self.head_num, self.span // self.stride, self.length_q), device='cuda')
         QK_table[:,:,self.vqi_row,self.vqi_column] = torch.matmul(Q[:,:,self.column[self.vqi_row,self.vqi_column],:].unsqueeze(3),K[:,:,self.qi_column[self.vqi_row,self.vqi_column],:].unsqueeze(4)).reshape(batch,self.head_num,len(self.vqi_row))/(self.dim_QK ** 0.5)
+        QK_table[:,:,self.ivqi_row,self.ivqi_column] = -float('inf')
         QKs_table = QK_table.softmax(2) # (batch, head_num, span//stride, length_q)
         QKs_table_V = QKs_table.unsqueeze(4).repeat(1,1,1,1,self.dim_V) # (batch, head_num, span//stride, length_q, dim_V)
         QKs_table_V[:,:,self.vqi_row,self.vqi_column,:] *= V[:,:,self.qi_column[self.vqi_row,self.vqi_column],:]
