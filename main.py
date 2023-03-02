@@ -74,7 +74,7 @@ model = GPTUNet(
     dim_scale=1.2,
     dim=256,
     dropout=0.2,
-    enable_pre=False,
+    enable_pre=True,
     enable_middle=True,
-    enable_post=False,
+    enable_post=True,
 )
