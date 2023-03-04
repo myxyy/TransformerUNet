@@ -17,25 +17,25 @@ class SparseMHAEncoder(nn.Module):
         self.length_q = length_q
         self.length_kv = length_kv
 
-        row, column = torch.meshgrid(torch.arange(span), torch.arange(length_q), indexing='ij')
-        kvi = row - (span-1) + torch.arange(0,stride*length_q,stride) # key-value index
-        is_valid_kvi = torch.logical_and(kvi >= 0, kvi < length_kv)
-        ivkvi_row, ivkvi_column = torch.where(~is_valid_kvi) # invalid key-value index
+        row, col = torch.meshgrid(torch.arange(span), torch.arange(length_q), indexing='ij')
+        kvi = row - (span-1) + col*stride
+        is_valid_kvi = torch.logical_and(0 <= kvi, kvi < length_kv)
+        ivkvi_row = row[torch.where(~is_valid_kvi)]
+        ivkvi_col = col[torch.where(~is_valid_kvi)]
 
         conv_K_weight_ind_key, conv_K_weight_ind_span = torch.meshgrid(torch.arange(dim_QK), torch.arange(span), indexing='ij')
-        conv_K_weight = torch.zeros(dim_QK, span, dim_QK, span)
-        conv_K_weight[conv_K_weight_ind_key, conv_K_weight_ind_span, conv_K_weight_ind_key, conv_K_weight_ind_span] = 1
-        conv_K_weight = conv_K_weight.reshape(dim_QK*span, dim_QK, span)
-        self.conv_K = nn.Conv1d(dim_QK, dim_QK*span, span, stride, padding=span-1)
+        conv_K_weight = torch.zeros(span, 1, span)
+        conv_K_weight[torch.arange(span),:,torch.arange(span)] = 1
+        self.conv_K = nn.Conv1d(1, span, span, stride, padding=span-1)
         self.conv_K.weight.data = conv_K_weight
         self.conv_K.weight.requires_grad = False
         self.table_QK_mask = torch.zeros(span, length_q).cuda()
-        self.table_QK_mask[ivkvi_row, ivkvi_column] = -float('inf')
+        self.table_QK_mask[ivkvi_row, ivkvi_col] = -float('inf')
+
         conv_V_weight_ind_key, conv_V_weight_ind_span = torch.meshgrid(torch.arange(dim_QK), torch.arange(span), indexing='ij')
-        conv_V_weight = torch.zeros(dim_V, span, dim_V, span)
-        conv_V_weight[conv_V_weight_ind_key, conv_V_weight_ind_span, conv_V_weight_ind_key, conv_V_weight_ind_span] = 1
-        conv_V_weight = conv_V_weight.reshape(dim_V*span, dim_V, span)
-        self.conv_V = nn.Conv1d(dim_V, dim_V*span, span, stride, padding=span-1)
+        conv_V_weight = torch.zeros(span, 1, span)
+        conv_V_weight[torch.arange(span),:,torch.arange(span)] = 1
+        self.conv_V = nn.Conv1d(1, span, span, stride, padding=span-1)
         self.conv_V.weight.data = conv_V_weight
         self.conv_V.weight.requires_grad = False
  
@@ -52,10 +52,10 @@ class SparseMHAEncoder(nn.Module):
         
         bh = batch * self.head_num
         Q = Q.view(batch, self.length_q, self.head_num, self.dim_QK).permute(0,2,3,1).reshape(bh, self.dim_QK, self.length_q)
-        K = K.view(batch, self.length_kv, self.head_num, self.dim_QK).permute(0,2,3,1).reshape(bh, self.dim_QK, self.length_kv)
-        V = V.view(batch, self.length_kv, self.head_num, self.dim_V).permute(0,2,3,1).reshape(bh, self.dim_V, self.length_kv)
+        K = K.view(batch, self.length_kv, self.head_num, self.dim_QK).permute(0,2,3,1).reshape(bh*self.dim_QK, 1, self.length_kv)
+        V = V.view(batch, self.length_kv, self.head_num, self.dim_V).permute(0,2,3,1).reshape(bh*self.dim_V, 1, self.length_kv)
 
-        table_K = self.conv_K(K) # (bh, dim_QK*span, ?)
+        table_K = self.conv_K(K) # (bh*dim_QK, span, ?)
         table_K = table_K[:,:,0:self.length_q]
         table_K = table_K.reshape(bh, self.dim_QK, self.span, self.length_q).permute(0,2,3,1) # (bh, span, length_q, dim_QK)
         Q = Q.expand(self.span,bh,self.dim_QK,self.length_q) # (span, bh, dim_QK, length_q)
