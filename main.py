@@ -11,12 +11,12 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 class GPTUNet(pl.LightningModule):
     logger: TensorBoardLogger
-    def __init__(self, model, length, downsample_rate, depth_unet, depth_transformer=1, dim_scale=1, head_num=8, dropout=0.1, vocab_size=256, dim=512, enable_pre=True, enable_middle=True, enable_post=True, enable_profiling=False):
+    def __init__(self, model, length, downsample_rate, depth_unet, depth_transformer=1, dim_scale=1, head_num=8, dropout=0.1, vocab_size=256, dim=512, enable_pre=True, enable_middle=True, enable_post=True, enable_profiling=False, span=None):
         super().__init__()
         self.enable_profiling = enable_profiling
         self.length = length
         self.vocab_size = vocab_size
-        self.transformer_u_net = model(length, downsample_rate, depth_unet, depth_transformer, dim, dim_scale, head_num, dropout, enable_pre=enable_pre, enable_middle=enable_middle, enable_post=enable_post)
+        self.transformer_u_net = model(length, downsample_rate, depth_unet, depth_transformer, dim, dim_scale, head_num, dropout, enable_pre=enable_pre, enable_middle=enable_middle, enable_post=enable_post, span=span)
         self.token_in = nn.Linear(vocab_size, dim)
         self.token_out = nn.Linear(dim, vocab_size)
         self.num_parameters = sum(p.numel() for p in self.parameters() if p.requires_grad)
@@ -65,7 +65,7 @@ class GPTUNet(pl.LightningModule):
         return optimizer
 
 model = GPTUNet(
-    SparseTransformerUNetSequence,
+    TransformerUNetSequence,
     length=1024,
     downsample_rate=0.5,
     depth_unet=10,
@@ -76,5 +76,6 @@ model = GPTUNet(
     enable_pre=True,
     enable_middle=True,
     enable_post=True,
+    span=4,
     # enable_profiling=True,
 )

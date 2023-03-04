@@ -8,7 +8,7 @@ import torch.nn as nn
 import math
 
 class TransformerUNetSequence(nn.Module):
-    def __init__(self, length: int, downsample_rate: float, depth_unet: int, depth_transformer: int, dim: int, dim_scale: float, head_num: int, dropout: int, enable_pre=True, enable_middle=True, enable_post=True):
+    def __init__(self, length: int, downsample_rate: float, depth_unet: int, depth_transformer: int, dim: int, dim_scale: float, head_num: int, dropout: int, enable_pre=True, enable_middle=True, enable_post=True, span=None):
         super().__init__()
         self.enable_pre = enable_pre
         self.enable_middle = enable_middle
@@ -25,9 +25,9 @@ class TransformerUNetSequence(nn.Module):
             self.self_encoder_middle_list = nn.ModuleList([TransformerEncoder(self.level_i_dim(i), head_num, depth_transformer, dropout) for i in range(depth_unet+1)])
         if enable_post:
             self.self_encoder_post_list = nn.ModuleList([TransformerEncoder(self.level_i_dim(i), head_num, depth_transformer, dropout) for i in range(depth_unet+1)])
-        self.self_mask_list = nn.ModuleList([SelfMask((int)(length*(downsample_rate**i))) for i in range(depth_unet+1)])
-        self.encoder_cross_mask_list = nn.ModuleList([CrossEncodeMask((int)(length*(downsample_rate**i)),(int)(length*(downsample_rate**(i+1)))) for i in range(depth_unet)])
-        self.decoder_cross_mask_list = nn.ModuleList([CrossDecodeMask((int)(length*(downsample_rate**(i+1))),(int)(length*(downsample_rate**i))) for i in range(depth_unet)])
+        self.self_mask_list = nn.ModuleList([SelfMask((int)(length*(downsample_rate**i)),span) for i in range(depth_unet+1)])
+        self.encoder_cross_mask_list = nn.ModuleList([CrossEncodeMask((int)(length*(downsample_rate**i)),(int)(length*(downsample_rate**(i+1))),span) for i in range(depth_unet)])
+        self.decoder_cross_mask_list = nn.ModuleList([CrossDecodeMask((int)(length*(downsample_rate**(i+1))),(int)(length*(downsample_rate**i)),span) for i in range(depth_unet)])
         self.positional_encoding_list = nn.ModuleList([PositionalEncoding((int)(length*(downsample_rate**i)), self.level_i_dim(i)) for i in range(depth_unet+1)])
 
     def level_i_dim(self, i):
@@ -70,6 +70,8 @@ class TransformerUNetSequence(nn.Module):
 class SparseTransformerUNetSequence(nn.Module):
     def __init__(self, length: int, downsample_rate: float, depth_unet: int, depth_transformer: int, dim: int, dim_scale: float, head_num: int, dropout: int, enable_pre=True, enable_middle=True, enable_post=True, span=4):
         super().__init__()
+        if span is None:
+            span = length
         self.enable_pre = enable_pre
         self.enable_middle = enable_middle
         self.enable_post = enable_post
