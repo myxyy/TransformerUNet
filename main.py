@@ -1,6 +1,5 @@
 from transformer_unet import TransformerUNetSequence
 from transformer_unet import SparseTransformerUNetSequence
-from transformer_unet import SparseTransformerUNetSequenceOptimized
 
 import pytorch_lightning as pl
 from timm.models.layers import trunc_normal_
@@ -66,7 +65,7 @@ class GPTUNet(pl.LightningModule):
         return optimizer
 
 model = GPTUNet(
-    SparseTransformerUNetSequenceOptimized,
+    SparseTransformerUNetSequence,
     length=1024,
     downsample_rate=0.5,
     depth_unet=10,
@@ -77,4 +76,5 @@ model = GPTUNet(
     enable_pre=True,
     enable_middle=True,
     enable_post=True,
+    # enable_profiling=True,
 )
