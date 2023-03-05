@@ -26,10 +26,9 @@ class SparseMHAEncoder(nn.Module):
         table_QK_mask[ivkvi_row, ivkvi_col] = -float('inf')
         self.table_QK_mask = nn.Parameter(table_QK_mask, requires_grad=False)
 
-        conv_K_weight_ind_key, conv_K_weight_ind_span = torch.meshgrid(torch.arange(dim_QK), torch.arange(span), indexing='ij')
         conv_K_weight = torch.zeros(span, 1, span)
         conv_K_weight[torch.arange(span),:,torch.arange(span)] = 1
-        self.conv_K = nn.Conv1d(1, span, span, stride, padding=span-1)
+        self.conv_K = nn.Conv1d(1, span, span, stride)
         self.conv_K.weight.data = conv_K_weight
         self.conv_K.weight.requires_grad = False
 
@@ -47,21 +46,22 @@ class SparseMHAEncoder(nn.Module):
         V = self.vV(v) # (batch, length_kv, head_num * dim_V)
         
         bh = batch * self.head_num
-        Q = Q.view(batch, self.length_q, self.head_num, self.dim_QK).permute(0,2,3,1).reshape(bh, self.dim_QK, self.length_q)
         K = K.view(batch, self.length_kv, self.head_num, self.dim_QK).permute(0,2,3,1).reshape(bh*self.dim_QK, 1, self.length_kv)
         V = V.view(batch, self.length_kv, self.head_num, self.dim_V).permute(0,2,3,1).reshape(bh*self.dim_V, 1, self.length_kv)
 
+        K = torch.nn.functional.pad(K,(self.span-1,0))
         table_K = self.conv_K(K) # (bh*dim_QK, span, ?)
-        table_K = table_K[:,:,:self.length_q]
-        table_K = table_K.reshape(bh, self.dim_QK, self.span, self.length_q).permute(0,2,3,1) # (bh, span, length_q, dim_QK)
-        Q = Q.expand(self.span,bh,self.dim_QK,self.length_q).permute(1,0,3,2) # (bh, span, length_q, dim_QK)
-        Q = Q.unsqueeze(3)
-        table_K = table_K.unsqueeze(4)
-        table_QK = torch.matmul(Q, table_K)/(self.dim_QK ** 0.5) # (bh, span, length_q)
-        table_QK = table_QK.reshape(bh, self.span, self.length_q)
+        #table_K = table_K[:,:,:self.length_q]
+        table_K = table_K.reshape(bh, self.dim_QK, self.span, self.length_q, 1).permute(0,2,3,1,4) # (bh, span, length_q, dim_QK, 1)
+        table_Q = Q.expand(self.span,batch,self.length_q,self.head_num*self.dim_QK)
+        table_Q = table_Q.reshape(self.span,batch,self.length_q,self.head_num,1,self.dim_QK)
+        table_Q = table_Q.permute(1,3,0,2,4,5).reshape(bh,self.span,self.length_q,1,self.dim_QK) # (bh, span, length_q, 1, dim_QK)
+        table_QK = torch.matmul(table_Q, table_K)/(self.dim_QK ** 0.5)
+        table_QK = table_QK.reshape(bh, self.span, self.length_q) # (bh, span, length_q)
         table_QK = table_QK + self.table_QK_mask
         table_QK = table_QK.softmax(1)
-        table_V = self.conv_V(V)[:,:,0:self.length_q].reshape(bh, self.dim_V, self.span, self.length_q).permute(0,2,3,1) # (bh, span, length_q, dim_V)
+        V = torch.nn.functional.pad(V,(self.span-1,0))
+        table_V = self.conv_V(V).reshape(bh, self.dim_V, self.span, self.length_q).permute(0,2,3,1) # (bh, span, length_q, dim_V)
         table_QKV = table_QK.unsqueeze(3) * table_V # (bh, span, length_q, dim_V)
         out = table_QKV.sum(1)
         out = out.reshape(batch, self.head_num, self.length_q, self.dim_V)
