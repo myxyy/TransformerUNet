@@ -198,11 +198,11 @@ class SparseMHADecoder(nn.Module):
         Q = self.qQ(q) # (batch, length_q, head_num * dim_QK)
         K = self.kK(k) # (batch, length_kv, head_num * dim_QK)
         V = self.vV(v) # (batch, length_kv, head_num * dim_V)
-        
 
         K = K.view(batch, self.length_kv, self.head_num, self.dim_QK).permute(0,2,3,1).reshape(bh * self.dim_QK, 1, self.length_kv)
+        K = torch.nn.functional.pad(K,(self.width-1,0))
         table_K = self.conv_K(K) # (bh * dim_QK, width, length_kv)
-        table_K = nn.Upsample(scale_factor=self.stride)(table_K) # (bh * dim_QK, width, lenght_kv * stride)
+        table_K = table_K.expand(self.stride, bh * self.dim_QK, self.width, self.length_kv).permute(1,2,3,0).reshape(bh * self.dim_QK, self.width, self.length_kv * self.stride)
         if self.length_kv * self.stride < self.length_q:
             table_K = table_K[:,:,:,0:length_q]
         table_K = table_K.reshape(bh, self.dim_QK, self.width, self.length_q, 1).permute(0,3,2,1,4) # (bh, length_q, width, dim_QK, 1)
@@ -213,13 +213,13 @@ class SparseMHADecoder(nn.Module):
         table_QK = table_QK + self.table_QK_mask
         table_QK = table_QK.softmax(2)
         V = V.view(batch, self.length_kv, self.head_num, self.dim_V).permute(0,2,3,1).reshape(bh * self.dim_V, 1, self.length_kv)
+        V = torch.nn.functional.pad(V,(self.width-1,0))
         table_V = self.conv_V(V) # (bh * dim_V, width, length_kv)
-        table_V = nn.Upsample(scale_factor=self.stride)(table_V) # (bh * dim_V, width, lenght_kv * stride)
+        table_V = table_V.expand(self.stride, bh * self.dim_V, self.width, self.length_kv).permute(1,2,3,0).reshape(bh * self.dim_V, self.width, self.length_kv * self.stride)
         if self.length_kv * self.stride < self.length_q:
             table_V = table_V[:,:,:,0:length_q]
         table_V = table_V.reshape(bh, self.dim_V, self.width, self.length_q).permute(0,3,2,1) # (bh, length_q, width, dim_V, 1)
         table_QKV = table_QK.unsqueeze(3) * table_V # (bh, length_q, width, dim_V)
-
         out = table_QKV.sum(2)
         out = out.reshape(batch, self.head_num, self.length_q, self.dim_V)
         out = out.transpose(2,1)
