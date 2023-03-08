@@ -1,6 +1,7 @@
 import copy
 import torch
 import torch.nn as nn
+import math
 
 class SparseMHAEncoder(nn.Module):
     def __init__(self, dim_q, dim_k, dim_v, dim_QK, dim_V, head_num, dim_out, span, stride, length_q, length_kv):
@@ -163,12 +164,28 @@ class SparseMHADecoder(nn.Module):
         self.length_q = length_q
         self.length_kv = length_kv
 
-        self.mask = torch.full((length_q, length_kv), -float('inf')).cuda()
-        mask_ind_row, mask_ind_col = torch.meshgrid(torch.arange(length_q), torch.arange(length_kv), indexing='ij')
-        mask_ind_span = mask_ind_row - mask_ind_col*stride
-        mask_trans_ind = torch.logical_and(0 <= mask_ind_span, mask_ind_span < span)
-        self.mask[mask_ind_row[mask_trans_ind],mask_ind_col[mask_trans_ind]] = 0
+        self.span = span
+        self.stride = stride
 
+        width = math.ceil(span/stride)
+        self.width = width
+        conv_K_weight = torch.zeros(width, 1, width)
+        conv_K_weight[torch.arange(width),:,torch.arange(width)] = 1
+        self.conv_K = nn.Conv1d(1, width, width)
+        self.conv_K.weight.data = conv_K_weight
+        self.conv_K.weight.requires_grad = False
+
+        self.conv_V = self.conv_K
+
+        mask_ind_row, mask_ind_col = torch.meshgrid(torch.arange(length_q), torch.arange(width), indexing='ij')
+        original_col = mask_ind_col - (width - 1) + mask_ind_row // stride
+        is_valid_col = torch.logical_and(0 <= original_col, original_col < length_kv)
+        is_valid_row = mask_ind_row % stride <= (span - 1) - (width - mask_ind_col - 1) * stride
+        is_valid = torch.logical_and(is_valid_col, is_valid_row)
+        mask_trans_ind = torch.where(is_valid)
+        table_QK_mask = torch.full((length_q, width), -float('inf'))
+        table_QK_mask[mask_ind_row[mask_trans_ind],mask_ind_col[mask_trans_ind]] = 0
+        self.table_QK_mask = nn.Parameter(table_QK_mask, requires_grad=False)
 
     # (batch, length_q, dim_q)
     # (batch, length_kv, dim_k)
@@ -176,22 +193,39 @@ class SparseMHADecoder(nn.Module):
     # -> (batch, length_q, dim_out)
     def forward(self, q, k, v):
         batch = q.shape[0]
+        bh = batch * self.head_num
 
         Q = self.qQ(q) # (batch, length_q, head_num * dim_QK)
         K = self.kK(k) # (batch, length_kv, head_num * dim_QK)
         V = self.vV(v) # (batch, length_kv, head_num * dim_V)
         
-        Q = Q.view(batch, self.length_q, self.head_num, self.dim_QK).permute(0,2,1,3) # (batch, head_num, length_q, dim_QK)
-        K = K.view(batch, self.length_kv, self.head_num, self.dim_QK).permute(0,2,1,3) # (batch, head_num, length_kv, dim_QK)
-        V = V.view(batch, self.length_kv, self.head_num, self.dim_V).permute(0,2,1,3) # (batch, head_num, length_kv, dim_V)
 
-        QK = torch.matmul(Q, K.transpose(3,2)) # (batch, head_num, length_q, length_kv)
-        QK = QK + self.mask
-        QK_softmax = QK.softmax(3)
-        QKV = torch.matmul(QK_softmax, V) # (batch, head_num, length_q, dim_V)
-        QKV = QKV.permute(0,2,1,3).reshape(batch, self.length_q, self.head_num * self.dim_V)
-        out = self.linear_out(QKV)
-        #print(f'length_q:{length_q}, length_kv:{length_kv}, len(vkvi_row):{len(vkvi_row)}, len(ivkvi_row):{len(ivkvi_row)}')
+        K = K.view(batch, self.length_kv, self.head_num, self.dim_QK).permute(0,2,3,1).reshape(bh * self.dim_QK, 1, self.length_kv)
+        table_K = self.conv_K(K) # (bh * dim_QK, width, length_kv)
+        table_K = nn.Upsample(scale_factor=self.stride)(table_K) # (bh * dim_QK, width, lenght_kv * stride)
+        if self.length_kv * self.stride < self.length_q:
+            table_K = table_K[:,:,:,0:length_q]
+        table_K = table_K.reshape(bh, self.dim_QK, self.width, self.length_q, 1).permute(0,3,2,1,4) # (bh, length_q, width, dim_QK, 1)
+        table_Q = Q.expand(self.width, batch, self.length_q, self.head_num * self.dim_QK)
+        table_Q = table_Q.reshape(self.width, batch, self.length_q, self.head_num, self.dim_QK)
+        table_Q = table_Q.permute(1,3,2,0,4).reshape(bh, self.length_q, self.width, 1, self.dim_QK) # (bh, length_q, width, 1, dim_QK)
+        table_QK = torch.matmul(table_Q, table_K).reshape(bh, self.length_q, self.width) # (bh, length_q, width)
+        table_QK = table_QK + self.table_QK_mask
+        table_QK = table_QK.softmax(2)
+        V = V.view(batch, self.length_kv, self.head_num, self.dim_V).permute(0,2,3,1).reshape(bh * self.dim_V, 1, self.length_kv)
+        table_V = self.conv_V(V) # (bh * dim_V, width, length_kv)
+        table_V = nn.Upsample(scale_factor=self.stride)(table_V) # (bh * dim_V, width, lenght_kv * stride)
+        if self.length_kv * self.stride < self.length_q:
+            table_V = table_V[:,:,:,0:length_q]
+        table_V = table_V.reshape(bh, self.dim_V, self.width, self.length_q).permute(0,3,2,1) # (bh, length_q, width, dim_V, 1)
+        table_QKV = table_QK.unsqueeze(3) * table_V # (bh, length_q, width, dim_V)
+
+        out = table_QKV.sum(2)
+        out = out.reshape(batch, self.head_num, self.length_q, self.dim_V)
+        out = out.transpose(2,1)
+        out = out.reshape(batch, self.length_q, self.head_num*self.dim_V)
+        out = self.linear_out(out)
+
         return out
 
 class SparseCrossTransformerDecoderBlock(nn.Module):
