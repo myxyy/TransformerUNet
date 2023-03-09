@@ -204,7 +204,7 @@ class SparseMHADecoder(nn.Module):
         table_K = self.conv_K(K) # (bh * dim_QK, width, length_kv)
         table_K = table_K.expand(self.stride, bh * self.dim_QK, self.width, self.length_kv).permute(1,2,3,0).reshape(bh * self.dim_QK, self.width, self.length_kv * self.stride)
         if self.length_kv * self.stride < self.length_q:
-            table_K = table_K[:,:,:,0:length_q]
+            table_K = table_K[:,:,:,0:self.length_q]
         table_K = table_K.reshape(bh, self.dim_QK, self.width, self.length_q, 1).permute(0,3,2,1,4) # (bh, length_q, width, dim_QK, 1)
         table_Q = Q.expand(self.width, batch, self.length_q, self.head_num * self.dim_QK)
         table_Q = table_Q.reshape(self.width, batch, self.length_q, self.head_num, self.dim_QK)
@@ -217,7 +217,7 @@ class SparseMHADecoder(nn.Module):
         table_V = self.conv_V(V) # (bh * dim_V, width, length_kv)
         table_V = table_V.expand(self.stride, bh * self.dim_V, self.width, self.length_kv).permute(1,2,3,0).reshape(bh * self.dim_V, self.width, self.length_kv * self.stride)
         if self.length_kv * self.stride < self.length_q:
-            table_V = table_V[:,:,:,0:length_q]
+            table_V = table_V[:,:,:,0:self.length_q]
         table_V = table_V.reshape(bh, self.dim_V, self.width, self.length_q).permute(0,3,2,1) # (bh, length_q, width, dim_V, 1)
         table_QKV = table_QK.unsqueeze(3) * table_V # (bh, length_q, width, dim_V)
         out = table_QKV.sum(2)
