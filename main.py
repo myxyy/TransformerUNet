@@ -76,6 +76,6 @@ model = GPTUNet(
     enable_pre=True,
     enable_middle=True,
     enable_post=True,
-    span=2,
+    span=8,
     # enable_profiling=True,
 )
