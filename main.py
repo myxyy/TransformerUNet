@@ -65,7 +65,7 @@ class GPTUNet(pl.LightningModule):
         return optimizer
 
 model = GPTUNet(
-    SparseTransformerUNetSequence,
+    TransformerUNetSequence,
     length=1024,
     downsample_rate=0.5,
     depth_unet=10,
@@ -76,6 +76,6 @@ model = GPTUNet(
     enable_pre=True,
     enable_middle=True,
     enable_post=True,
-    span=2,
+    # span=2,
     # enable_profiling=True,
 )
