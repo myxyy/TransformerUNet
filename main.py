@@ -13,6 +13,7 @@ class GPTUNet(pl.LightningModule):
     logger: TensorBoardLogger
     def __init__(self, model, length, downsample_rate, depth_unet, depth_transformer=1, dim_scale=1, head_num=8, dropout=0.1, vocab_size=256, dim=512, enable_pre=True, enable_middle=True, enable_post=True, enable_profiling=False, span=None):
         super().__init__()
+        self.save_hyperparameters()
         self.enable_profiling = enable_profiling
         self.length = length
         self.vocab_size = vocab_size
@@ -57,8 +58,8 @@ class GPTUNet(pl.LightningModule):
         x_hat = x_hat.softmax(2)
         return x_hat
 
-    def training_epoch_end(self, outputs):
-        torch.save(self.state_dict(), 'weight.pth')
+    #def training_epoch_end(self, outputs):
+    #    torch.save(self.state_dict(), 'weight.pth')
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
